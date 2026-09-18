@@ -1,2 +1,60 @@
 # blog-audio-worker
-Audio generation worker: narration and podcast synthesis for vitorpaulo.dev blog posts
+
+Audio generation worker for the blog narration & podcast pipeline (issue #19).
+
+## What it does
+
+Spring (`blog-service`) dispatches HTTP `POST /generate` jobs. For each of the 4 artifacts
+(`NARRATION|PODCAST × ENGLISH|PORTUGUESE`) the worker:
+
+1. Writes progress to Redis (`{postId}:{type}:{language}` → `{status, progress, error}`, TTL 7 days).
+2. Generates audio:
+   - `NARRATION`: cleans markdown (code blocks stripped), synthesizes via VoiceStudio
+     `POST /v1/audio/speech` with 4096-char sentence-boundary chunking and concat.
+   - `PODCAST`: generates a two-speaker JSON script via the OpenCode serve HTTP API
+     (humanizer-skill style prompt), renders each turn with a speaker `instruct`, concats.
+3. Uploads the MP3 to the presigned PUT URL provided in the job payload.
+4. Marks `READY` — or `FAILED` with the error. One artifact failing never aborts the others.
+
+The endpoint answers `202` immediately; artifacts are processed in the background with
+a concurrency limit of 2 per accepted batch.
+
+## Configuration
+
+All upstreams are network endpoints — see `.env.example`:
+
+| Variable | Meaning |
+| --- | --- |
+| `PORT` | HTTP port (default 3901) |
+| `REDIS_URL` | required, `redis://[:password@]host:6379` or `rediss://...` (TLS) |
+| `VOICE_STUDIO_URL` | required, VoiceStudio base URL |
+| `VOICE_STUDIO_TOKEN` | VoiceStudio bearer token |
+| `OPENCODE_URL` | OpenCode serve endpoint |
+| `OPENCODE_MODEL` / `OPENCODE_TOKEN` | optional model / bearer token (falls back to `CASE_OPENCODE_TOKEN`) |
+| `VOICE_PROFILE_ID` / `VOICE_PROFILE_ID_{ENGLISH,PORTUGUESE}` | voice profile per language |
+
+At startup the worker validates env presence (`REDIS_URL`, `VOICE_STUDIO_URL`), then probes
+each upstream. A missing/invalid env kills the start; an unreachable Redis/VoiceStudio/OpenCode
+does **not** — the worker starts and artifacts fail per-job until connectivity recovers.
+Redis reconnects on the next write.
+
+## Redis client
+
+Plain TCP RESP client implemented in-repo (`src/redis.ts`) — no Redis process is bundled and no
+Redis dependency is installed. Connection URLs are parsed by `parseRedisUrl`. During tests the
+socket is never real; reconnection behavior is covered by mocked factories.
+
+## Podcast script prompt
+
+`src/podcast.ts` builds the prompt with humanizer-style instructions (natural speech, no
+formulaic LLM phrasing, title-first opening, ≥90% content coverage without reading code aloud)
+and requires a strict `[{"speaker": "HOST"|"GUEST", "text": "..."}]` JSON answer.
+
+## Development
+
+```sh
+npm install
+npm run build   # tsc
+npm test        # vitest
+npm start       # node dist/index.js
+```
