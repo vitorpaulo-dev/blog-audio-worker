@@ -55,7 +55,10 @@ function startServer(): Promise<{
       voiceStudioUrl: "",
       voiceStudioToken: "",
       redisUrl: "redis://localhost:6379",
-      profileId: {},
+      voiceProfiles: {
+        ENGLISH: { host: "en-host", guest: "en-guest" },
+        PORTUGUESE: { host: "pt-host", guest: "pt-guest" },
+      },
       concurrencyLimit: 2,
       redisTtlSeconds: 100,
     },

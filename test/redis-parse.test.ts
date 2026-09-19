@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseRedisUrl } from "../src/redis.js";
-import { loadConfig, MissingConfigError } from "../src/config.js";
+import { loadConfig } from "../src/config.js";
 
 describe("parseRedisUrl", () => {
   it("parses a plain network address", () => {
@@ -40,9 +40,10 @@ describe("parseRedisUrl", () => {
 });
 
 describe("loadConfig required env", () => {
-  it("throws when REDIS_URL is missing", () => {
-    expect(() => loadConfig({ VOICE_STUDIO_URL: "http://vs" } as NodeJS.ProcessEnv)).toThrow(MissingConfigError);
-    expect(() => loadConfig({ VOICE_STUDIO_URL: "http://vs" } as NodeJS.ProcessEnv)).toThrow("REDIS_URL");
+  it("accepts a missing REDIS_URL as redis disabled", () => {
+    const config = loadConfig({ VOICE_STUDIO_URL: "http://vs" } as NodeJS.ProcessEnv);
+    expect(config.redisUrl).toBeUndefined();
+    expect(config.voiceStudioUrl).toBe("http://vs");
   });
 
   it("throws when VOICE_STUDIO_URL is missing", () => {
@@ -57,6 +58,6 @@ describe("loadConfig required env", () => {
     expect(config.opencodeUrl).toBe("http://localhost:4096");
     expect(config.port).toBe(3901);
     expect(config.voiceStudioUrl).toBe("http://vs");
-    expect(config.profileId.PORTUGUESE).toBe("default");
+    expect(config.voiceProfiles.PORTUGUESE).toEqual({});
   });
 });

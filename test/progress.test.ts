@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createProgressStore } from "../src/progress.js";
+import { createNoopProgressStore, createProgressStore } from "../src/progress.js";
 
 function fakeRedis() {
   const writes: { key: string; value: string; ttl: number }[] = [];
@@ -41,5 +41,12 @@ describe("progress store", () => {
     const store = createProgressStore(redis, TTL);
     await store.write(POST_ID, "PODCAST", "ENGLISH", { status: "READY", progress: 100 });
     expect(JSON.parse(redis.writes[0]?.value ?? "")).toEqual({ status: "READY", progress: 100 });
+  });
+
+  it("offers a no-op store that resolves writes without touching Redis", async () => {
+    const store = createNoopProgressStore();
+    await expect(store.write(POST_ID, "NARRATION", "ENGLISH", { status: "QUEUED", progress: 0 })).resolves.toBeUndefined();
+    await expect(store.write(POST_ID, "NARRATION", "ENGLISH", { status: "READY", progress: 100 })).resolves.toBeUndefined();
+    await expect(store.write(POST_ID, "NARRATION", "ENGLISH", { status: "FAILED", progress: 0, error: "boom" })).resolves.toBeUndefined();
   });
 });

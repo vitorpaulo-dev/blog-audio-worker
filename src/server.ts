@@ -3,6 +3,7 @@ import { parseAudioJobRequest } from "./validate.js";
 import { collectJobs, processJobs, type JobDeps } from "./jobs.js";
 import type { Config } from "./config.js";
 import type { ProgressStore } from "./progress.js";
+import { logEvent } from "./logger.js";
 
 export interface ServerDeps {
   config: Config;
@@ -49,6 +50,7 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse, deps:
 
   res.writeHead(202, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ accepted: jobs.map(key) }));
+  logEvent("job.accepted", { postId: parsed.postId, postSlug: parsed.postSlug, artifacts: jobs.map(key) });
 
   void processJobs(jobs, jobDeps);
 }

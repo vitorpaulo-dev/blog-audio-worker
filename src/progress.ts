@@ -28,6 +28,12 @@ export function createProgressStore(
   return new RedisProgressStore(redis, ttlSeconds);
 }
 
+export function createNoopProgressStore(): ProgressStore {
+  return {
+    async write(): Promise<void> {},
+  };
+}
+
 export class RedisWriteError extends Error {
   constructor(
     readonly key: string,
