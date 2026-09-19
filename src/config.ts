@@ -3,8 +3,8 @@ export interface Config {
   opencodeUrl: string;
   voiceStudioUrl: string;
   voiceStudioToken: string;
-  redisUrl: string;
-  profileId: Record<string, string>;
+  redisUrl?: string;
+  voiceProfiles: Record<string, VoiceProfiles>;
   opencodeModel?: string;
   opencodeToken?: string;
   concurrencyLimit: number;
@@ -25,9 +25,45 @@ function required(value: string | undefined, name: string): string {
   return value.trim();
 }
 
-function profileFor(env: NodeJS.ProcessEnv, language: string): string {
-  const perLanguage = env[`VOICE_PROFILE_ID_${language}`];
-  return perLanguage || env.VOICE_PROFILE_ID || "default";
+export type VoiceLanguage = "ENGLISH" | "PORTUGUESE";
+
+export type VoiceRole = "HOST" | "GUEST";
+
+export interface VoiceProfiles {
+  host?: string;
+  guest?: string;
+}
+
+function optional(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function voiceProfilesFor(env: NodeJS.ProcessEnv, language: VoiceLanguage): VoiceProfiles {
+  return {
+    host: optional(env[`VOICE_PROFILE_ID_${language}_HOST`]),
+    guest: optional(env[`VOICE_PROFILE_ID_${language}_GUEST`]),
+  };
+}
+
+export class VoiceProfileMissingError extends Error {
+  constructor(role: VoiceRole, language: string) {
+    super(`voiceMissing: VOICE_PROFILE_ID_${language}_${role} is not configured`);
+    this.name = "VoiceProfileMissingError";
+  }
+}
+
+export function resolveVoiceProfile(
+  voiceProfiles: Record<string, VoiceProfiles | undefined>,
+  role: VoiceRole,
+  language: string,
+): string {
+  const profiles = voiceProfiles[language] ?? {};
+  const profile = role === "GUEST" ? profiles.guest : profiles.host;
+  if (!profile) {
+    throw new VoiceProfileMissingError(role, language);
+  }
+  return profile;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -36,10 +72,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     opencodeUrl: env.OPENCODE_URL?.trim() || "http://localhost:4096",
     voiceStudioUrl: required(env.VOICE_STUDIO_URL, "VOICE_STUDIO_URL").replace(/\/$/, ""),
     voiceStudioToken: env.VOICE_STUDIO_TOKEN?.trim() ?? "",
-    redisUrl: required(env.REDIS_URL, "REDIS_URL"),
-    profileId: {
-      ENGLISH: profileFor(env, "ENGLISH"),
-      PORTUGUESE: profileFor(env, "PORTUGUESE"),
+    redisUrl: optional(env.REDIS_URL),
+    voiceProfiles: {
+      ENGLISH: voiceProfilesFor(env, "ENGLISH"),
+      PORTUGUESE: voiceProfilesFor(env, "PORTUGUESE"),
     },
     opencodeModel: env.OPENCODE_MODEL?.trim() || undefined,
     opencodeToken: env.OPENCODE_TOKEN?.trim() || env.CASE_OPENCODE_TOKEN?.trim() || undefined,

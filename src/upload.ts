@@ -25,7 +25,3 @@ async function safeText(response: Response): Promise<string> {
     return "<unreadable>";
   }
 }
-
-export function voiceProfileForLanguage(config: { profileId: Record<string, string> }, language: string): string {
-  return config.profileId[language] || "default";
-}
