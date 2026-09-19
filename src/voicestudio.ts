@@ -1,8 +1,9 @@
+import { describeCause, sanitizeSnippet } from "./opencode.js";
+
 export interface GenerateInput {
   text: string;
   language: AudioLanguageInput;
   voice: string;
-  instruct?: string;
 }
 
 export type AudioLanguageInput = "ENGLISH" | "PORTUGUESE" | string;
@@ -20,7 +21,30 @@ export interface SpeechRequest {
   voice: string;
   response_format: "mp3";
   language: string;
-  instruct?: string;
+}
+
+export class VoiceStudioNetworkError extends Error {
+  constructor(message: string, cause: unknown) {
+    super(message);
+    this.name = "VoiceStudioNetworkError";
+    this.cause = cause;
+  }
+}
+
+export class VoiceStudioHttpError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "VoiceStudioHttpError";
+    this.status = status;
+  }
+}
+
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+
+export interface GenerateVoiceOptions {
+  timeoutMs?: number;
 }
 
 export async function generateVoice(
@@ -28,6 +52,7 @@ export async function generateVoice(
   token: string,
   input: GenerateInput,
   fetchImpl: typeof fetch = fetch,
+  options: GenerateVoiceOptions = {},
 ): Promise<Buffer> {
   const request: SpeechRequest = {
     model: "omnivoice",
@@ -35,18 +60,27 @@ export async function generateVoice(
     voice: input.voice,
     response_format: "mp3",
     language: mapLanguage(input.language),
-    ...(input.instruct ? { instruct: input.instruct } : {}),
   };
 
-  const response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/v1/audio/speech`, {
-    method: "POST",
-    headers: buildHeaders(token),
-    body: JSON.stringify(request),
-  });
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  let response: Response;
+  try {
+    response = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/v1/audio/speech`, {
+      method: "POST",
+      headers: buildHeaders(token),
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    throw new VoiceStudioNetworkError(`VoiceStudio /v1/audio/speech call failed (fetch): ${describeCause(error)}`, error);
+  }
 
   if (!response.ok) {
     const detail = await safeText(response);
-    throw new Error(`VoiceStudio /v1/audio/speech failed: ${response.status} ${detail}`);
+    throw new VoiceStudioHttpError(
+      response.status,
+      `VoiceStudio /v1/audio/speech failed: ${response.status}: ${sanitizeSnippet(detail, token)}`,
+    );
   }
 
   return decodeAudio(response);
