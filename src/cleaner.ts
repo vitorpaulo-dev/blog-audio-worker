@@ -22,3 +22,18 @@ export function cleanForNarration(markdown: string): string {
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 }
+
+export function cleanPodcastTurnText(text: string): string {
+  return text
+    .replace(/^\s*```.*$/gm, "")
+    .replace(/`+/g, "")
+    .replace(/^\s*#{1,6}\s*/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/(__)([^_]+)(__)/g, "$2")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/^(\s*)[-*+]\s+/gm, "$1")
+    .replace(/^(\s*)\d+\.\s+/gm, "$1")
+    .replace(/^(\s*)>\s?/gm, "$1")
+    .trim();
+}
